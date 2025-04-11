@@ -710,7 +710,7 @@
     "ranking": true,
     "formatting": "sharegpt",
     "columns": {
-      "messages": "conversations",
+      "messages": "messages",
       "chosen": "chosen",
       "rejected": "rejected",
       "images": "images"
