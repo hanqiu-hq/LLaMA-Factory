@@ -17,7 +17,7 @@ deepspeed: "examples/deepspeed/ds_z2_config.json"
 ### dataset
 dataset: rlaif_10k_in800
 template: qwen2_vl
-cutoff_len: 8192
+cutoff_len: 20000
 max_samples: 10000
 overwrite_cache: true
 preprocessing_num_workers: 16
@@ -29,8 +29,8 @@ logging_steps: 10
 save_steps: 10000
 plot_loss: true
 overwrite_output_dir: true
-save_only_model: false
-report_to: none  # choices: [none, wandb, tensorboard, swanlab, mlflow]
+save_only_model: True
+report_to: wandb  # choices: [none, wandb, tensorboard, swanlab, mlflow]
 
 ### train
 per_device_train_batch_size: 1
@@ -42,9 +42,3 @@ warmup_ratio: 0.1
 bf16: true
 ddp_timeout: 180000000
 resume_from_checkpoint: null
-
-### eval
-# val_size: 0.1
-# per_device_eval_batch_size: 1
-# eval_strategy: steps
-# eval_steps: 500
