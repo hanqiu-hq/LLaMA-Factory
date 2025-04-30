@@ -101,6 +101,7 @@ class CustomDPOTrainer(DPOTrainer):
         self.ftx_gamma = finetuning_args.pref_ftx
         self.label_smoothing = finetuning_args.dpo_label_smoothing
         self.simpo_gamma = finetuning_args.simpo_gamma
+        self.average_mode = finetuning_args.reform_average_mode
 
         Trainer.__init__(self, model=model, **kwargs)
         self.model_accepts_loss_kwargs = False  # overwrite trainer's default behavior
@@ -179,8 +180,8 @@ class CustomDPOTrainer(DPOTrainer):
             reference_rejected_logps: torch.FloatTensor,
             chosen_length: torch.Tensor,
             rejected_length: torch.Tensor,
-            chosen_weight: torch.Tensor = 0,
-            rejected_weight: torch.Tensor = 0,
+            chosen_weight: torch.Tensor = 1,
+            rejected_weight: torch.Tensor = 1,
     ):
         """Compute the DPO loss for a batch of policy and reference model log probabilities.
 
@@ -207,15 +208,13 @@ class CustomDPOTrainer(DPOTrainer):
 
         with torch.no_grad():
             if self.average_mode == "average_weight":
-                logits_for_weight = (
-                                                policy_chosen_logps - reference_chosen_logps) / chosen_length - (
-                                                policy_rejected_logps - reference_rejected_logps) / rejected_length
+                logits_for_weight = (policy_chosen_logps - reference_chosen_logps) / chosen_length - (
+                        policy_rejected_logps - reference_rejected_logps) / rejected_length
                 logits_for_weight = logits_for_weight * (chosen_length + rejected_length) / 2
                 weight = - self.beta * F.sigmoid(-self.beta * logits_for_weight)
             elif self.average_mode == "mean_weight":
-                logits_for_weight = (
-                                                policy_chosen_logps - reference_chosen_logps) / chosen_length - (
-                                                policy_rejected_logps - reference_rejected_logps) / rejected_length
+                logits_for_weight = (policy_chosen_logps - reference_chosen_logps) / chosen_length - (
+                        policy_rejected_logps - reference_rejected_logps) / rejected_length
                 weight = - self.beta * F.sigmoid(- logits_for_weight)
             else:
                 weight = - self.beta * F.sigmoid(-self.beta * logits)

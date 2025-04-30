@@ -134,7 +134,7 @@ class RLHFArguments:
         default=0.0,
         metadata={"help": "The supervised fine-tuning loss coefficient in DPO training."},
     )
-    pref_loss: Literal["sigmoid", "hinge", "ipo", "kto_pair", "orpo", "simpo"] = field(
+    pref_loss: Literal["sigmoid", "hinge", "ipo", "kto_pair", "orpo", "simpo", "reform"] = field(
         default="sigmoid",
         metadata={"help": "The type of DPO loss to use."},
     )
@@ -173,6 +173,10 @@ class RLHFArguments:
     ppo_whiten_rewards: bool = field(
         default=False,
         metadata={"help": "Whiten the rewards before compute advantages in PPO training."},
+    )
+    reform_average_mode: str = field(
+        default="none",
+        metadata={"help": "average_weight, mean_weight, average, mean, mean_both"}
     )
     ref_model: Optional[str] = field(
         default=None,
