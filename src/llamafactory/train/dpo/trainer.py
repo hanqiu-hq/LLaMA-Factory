@@ -31,13 +31,34 @@ from typing_extensions import override
 from ...extras.constants import IGNORE_INDEX
 from ...extras.packages import is_transformers_version_greater_than
 from ..callbacks import SaveProcessorCallback
-from ..trainer_utils import create_custom_optimizer, create_custom_scheduler, get_batch_logps, nested_detach
+from ..trainer_utils import create_custom_optimizer, create_custom_scheduler, nested_detach
 
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, ProcessorMixin
 
     from ...hparams import FinetuningArguments
+
+
+def get_batch_logps(
+    logits: "torch.Tensor", labels: "torch.Tensor", label_pad_token_id: int = IGNORE_INDEX
+) -> tuple["torch.Tensor", "torch.Tensor"]:
+    r"""Compute the log probabilities of the given labels under the given logits.
+
+    Returns:
+        logps: A tensor of shape (batch_size,) containing the sum of log probabilities.
+        valid_length: A tensor of shape (batch_size,) containing the number of non-masked tokens.
+
+    """
+    if logits.shape[:-1] != labels.shape:
+        raise ValueError("Logits (batchsize x seqlen) and labels must have the same shape.")
+
+    labels = labels[:, 1:].clone()
+    logits = logits[:, :-1, :]
+    loss_mask = labels != label_pad_token_id
+    labels[labels == label_pad_token_id] = 0  # dummy token
+    per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
+    return (per_token_logps * loss_mask).sum(-1), loss_mask.sum(-1), per_token_logps * loss_mask
 
 
 class CustomDPOTrainer(DPOTrainer):
@@ -150,6 +171,76 @@ class CustomDPOTrainer(DPOTrainer):
         simpo_loss = -F.logsigmoid(self.beta * logits)
         return simpo_loss
 
+    def dpo_loss_reform(
+            self,
+            policy_chosen_logps_per_token: torch.FloatTensor,
+            policy_rejected_logps_per_token: torch.FloatTensor,
+            reference_chosen_logps: torch.FloatTensor,
+            reference_rejected_logps: torch.FloatTensor,
+            chosen_length: torch.Tensor,
+            rejected_length: torch.Tensor,
+            chosen_weight: torch.Tensor = 0,
+            rejected_weight: torch.Tensor = 0,
+    ):
+        """Compute the DPO loss for a batch of policy and reference model log probabilities.
+
+        Args:
+            policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
+            policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
+            reference_chosen_logps: Log probabilities of the reference model for the chosen responses. Shape: (batch_size,)
+            reference_rejected_logps: Log probabilities of the reference model for the rejected responses. Shape: (batch_size,)
+
+        Returns:
+            A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
+            The losses tensor contains the DPO loss for each example in the batch.
+            The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
+        """
+        policy_chosen_logps = policy_chosen_logps_per_token.sum(-1)
+        policy_rejected_logps = policy_rejected_logps_per_token.sum(-1)
+        policy_chosen_loss_term = (policy_chosen_logps_per_token * chosen_weight).sum(-1)
+        policy_rejected_loss_term = (policy_rejected_logps_per_token * rejected_weight).sum(-1)
+
+        pi_logratios = policy_chosen_logps - policy_rejected_logps
+        ref_logratios = reference_chosen_logps - reference_rejected_logps
+
+        logits = pi_logratios - ref_logratios
+
+        with torch.no_grad():
+            if self.average_mode == "average_weight":
+                logits_for_weight = (
+                                                policy_chosen_logps - reference_chosen_logps) / chosen_length - (
+                                                policy_rejected_logps - reference_rejected_logps) / rejected_length
+                logits_for_weight = logits_for_weight * (chosen_length + rejected_length) / 2
+                weight = - self.beta * F.sigmoid(-self.beta * logits_for_weight)
+            elif self.average_mode == "mean_weight":
+                logits_for_weight = (
+                                                policy_chosen_logps - reference_chosen_logps) / chosen_length - (
+                                                policy_rejected_logps - reference_rejected_logps) / rejected_length
+                weight = - self.beta * F.sigmoid(- logits_for_weight)
+            else:
+                weight = - self.beta * F.sigmoid(-self.beta * logits)
+
+        if self.average_mode == "average":
+            weight = weight * (chosen_length + rejected_length) / 2
+            losses = weight * (policy_chosen_loss_term / chosen_length - policy_rejected_loss_term / rejected_length)
+        elif self.average_mode == "mean":
+            weight = weight / self.beta
+            losses = weight * (policy_chosen_loss_term / chosen_length - policy_rejected_loss_term / rejected_length)
+        elif self.average_mode == "mean_both":
+            weight = weight * 8 / self.beta
+            losses = weight * (policy_chosen_loss_term - policy_rejected_loss_term) / ((chosen_length + rejected_length) / 2)
+        else:
+            losses = weight * (policy_chosen_loss_term - policy_rejected_loss_term)
+
+        # The beta is a temperature parameter for the DPO loss, typically something in the range of 0.1 to 0.5.
+        # We ignore the reference model as beta -> 0. The label_smoothing parameter encodes our uncertainty about the labels and
+        # calculates a conservative DPO loss.
+
+        chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
+        rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()
+
+        return losses, chosen_rewards, rejected_rewards
+
     def compute_preference_loss(
         self,
         policy_chosen_logps: "torch.Tensor",
@@ -187,19 +278,17 @@ class CustomDPOTrainer(DPOTrainer):
             batch = nested_detach(batch, clone=True)  # avoid error
 
         all_logits: torch.Tensor = model(**batch, return_dict=True, use_cache=False).logits.to(torch.float32)
-        all_logps, valid_length = get_batch_logps(logits=all_logits, labels=batch["labels"])
+        all_logps, valid_length, per_token_logps = get_batch_logps(logits=all_logits, labels=batch["labels"])
         if self.loss_type in ["ipo", "orpo", "simpo"]:
             all_logps = all_logps / valid_length
 
         batch_size = batch["input_ids"].size(0) // 2
         chosen_logps, rejected_logps = all_logps.split(batch_size, dim=0)
         chosen_logits, rejected_logits = all_logits.split(batch_size, dim=0)
-        chosen_length, _ = valid_length.split(batch_size, dim=0)
+        chosen_length, rejected_length = valid_length.split(batch_size, dim=0)
+        chosen_token_logps, rejected_token_logps = per_token_logps.split(batch_size, dim=0)
 
-        if self.loss_type in ["ipo", "orpo", "simpo"]:
-            return chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_logps
-        else:
-            return chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_logps / chosen_length
+        return chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_length, rejected_length, chosen_token_logps, rejected_token_logps
 
     @override
     def compute_reference_log_probs(
@@ -235,17 +324,35 @@ class CustomDPOTrainer(DPOTrainer):
             policy_rejected_logps,
             policy_chosen_logits,
             policy_rejected_logits,
-            policy_chosen_logps_avg,
+            chosen_length,
+            rejected_length,
+            chosen_token_logps,
+            rejected_token_logps,
         ) = self.concatenated_forward(model, batch)
 
         reference_chosen_logps, reference_rejected_logps = self.compute_reference_log_probs(model, batch)
-        losses, chosen_rewards, rejected_rewards = self.compute_preference_loss(
-            policy_chosen_logps,
-            policy_rejected_logps,
-            reference_chosen_logps,
-            reference_rejected_logps,
-        )
-        sft_loss = -policy_chosen_logps_avg
+        if self.loss_type == "reform":
+            losses, chosen_rewards, rejected_rewards = self.dpo_loss_reform(
+                chosen_token_logps,
+                rejected_token_logps,
+                reference_chosen_logps,
+                reference_rejected_logps,
+                chosen_length,
+                rejected_length
+            )
+        else:
+            losses, chosen_rewards, rejected_rewards = self.compute_preference_loss(
+                policy_chosen_logps,
+                policy_rejected_logps,
+                reference_chosen_logps,
+                reference_rejected_logps,
+            )
+
+        if self.loss_type in ["ipo", "orpo", "simpo"]:
+            sft_loss = -policy_chosen_logps
+        else:
+            sft_loss = -policy_chosen_logps / chosen_length
+
         if self.ftx_gamma > 1e-6:
             losses += self.ftx_gamma * sft_loss
 

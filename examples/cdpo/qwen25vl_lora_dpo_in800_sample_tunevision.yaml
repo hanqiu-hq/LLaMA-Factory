@@ -13,6 +13,7 @@ lora_target: all
 pref_beta: 0.1
 pref_loss: sigmoid  # choices: [sigmoid (dpo), orpo, simpo]
 deepspeed: "examples/deepspeed/ds_z2_config.json"
+unfreeze_vision_tower: True
 
 ### dataset
 dataset: rlaif_10k_in800

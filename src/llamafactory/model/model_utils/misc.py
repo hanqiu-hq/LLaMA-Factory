@@ -25,6 +25,20 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def find_modules_by_keys(model, keys: list[str]) -> list[str]:
+    model_type = getattr(model.config, "model_type", None)
+    matched_modules = set()
+    if model_type in COMPOSITE_MODELS:
+        for key in keys:
+            if key == "projector":
+                matched_modules.add(COMPOSITE_MODELS[model_type].projector_key)
+            elif key == "vision_model":
+                matched_modules.update(COMPOSITE_MODELS[model_type].vision_model_keys)
+            elif key == "language_model":
+                matched_modules.update(COMPOSITE_MODELS[model_type].language_model_keys)
+    return matched_modules
+
+
 def find_all_linear_modules(model: "PreTrainedModel", freeze_vision_tower: bool) -> list[str]:
     r"""Find all available modules to apply LoRA, GaLore or APOLLO."""
     model_type = getattr(model.config, "model_type", None)

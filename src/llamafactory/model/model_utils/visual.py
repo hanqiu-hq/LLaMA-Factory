@@ -277,7 +277,7 @@ _register_composite_model(
     projector_key="visual.merger",
     vision_model_keys=["visual.patch_embed", "visual.blocks"],
     language_model_keys=["model", "lm_head"],
-    lora_conflict_keys=["patch_embed"],
+    lora_conflict_keys=["patch_embed", "lm_head"],
 )
 
 
@@ -286,5 +286,5 @@ _register_composite_model(
     projector_key="visual.merger",
     vision_model_keys=["visual.patch_embed", "visual.blocks"],
     language_model_keys=["model", "lm_head"],
-    lora_conflict_keys=["patch_embed"],
+    lora_conflict_keys=["patch_embed", "lm_head"],
 )

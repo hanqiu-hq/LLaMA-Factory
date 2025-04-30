@@ -20,7 +20,7 @@ from peft import LoraConfig, LoraModel, PeftModel, TaskType, get_peft_model
 from transformers.integrations import is_deepspeed_zero3_enabled
 
 from ..extras import logging
-from .model_utils.misc import find_all_linear_modules, find_expanded_modules
+from .model_utils.misc import find_all_linear_modules, find_expanded_modules, find_modules_by_keys
 from .model_utils.quantization import QuantizationMethod
 from .model_utils.unsloth import get_unsloth_peft_model, load_unsloth_peft_model
 from .model_utils.visual import get_forbidden_modules, patch_target_modules
@@ -250,6 +250,12 @@ def _setup_lora_tuning(
     if is_trainable and cast_trainable_params_to_fp32:
         for param in filter(lambda p: p.requires_grad, model.parameters()):
             param.data = param.data.to(torch.float32)
+
+    if finetuning_args.unfreeze_vision_tower:
+        unfreeze_modules = find_modules_by_keys(model, ['vision_model'])
+        for name, param in model.named_parameters():
+            if any(module_keyword in name for module_keyword in unfreeze_modules):
+                param.requires_grad_(True)
 
     return model
 
