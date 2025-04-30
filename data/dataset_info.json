@@ -715,5 +715,16 @@
       "rejected": "rejected",
       "images": "images"
     }
+  },
+  "rlaif_20k_in800": {
+    "file_name": "./datasets/cdpo/qwen25_vl_rlaif_20k_in800_sample.json",
+    "ranking": true,
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "images": "images"
+    }
   }
 }
