@@ -178,6 +178,14 @@ class RLHFArguments:
         default="none",
         metadata={"help": "average_weight, mean_weight, average, mean, mean_both"}
     )
+    noise_loss_type: str = field(
+        default="none",
+        metadata={"help": "reform_weight, reform_weight_clip"}
+    )
+    noise_beta: float = field(
+        default="0.5",
+        metadata={"help": "for per token weight"}
+    )
     ref_model: Optional[str] = field(
         default=None,
         metadata={"help": "Path to the reference model used for the PPO or DPO training."},

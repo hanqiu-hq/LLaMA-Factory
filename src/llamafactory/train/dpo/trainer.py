@@ -40,6 +40,31 @@ if TYPE_CHECKING:
     from ...hparams import FinetuningArguments
 
 
+def add_image_diffusion_noise(image_tensor, noise_step):
+    num_steps = 1000  # Number of diffusion steps
+
+    # decide beta in each step
+    betas = torch.linspace(-6,6,num_steps)
+    betas = torch.sigmoid(betas) * (0.5e-2 - 1e-5) + 1e-5
+
+    # decide alphas in each step
+    alphas = 1 - betas
+    alphas_prod = torch.cumprod(alphas, dim=0)
+    alphas_bar_sqrt = torch.sqrt(alphas_prod)
+    one_minus_alphas_bar_sqrt = torch.sqrt(1 - alphas_prod)
+
+    def q_x(x_0,t):
+        noise = torch.randn_like(x_0)
+        alphas_t = alphas_bar_sqrt[t]
+        alphas_1_m_t = one_minus_alphas_bar_sqrt[t]
+        return (alphas_t*x_0 + alphas_1_m_t*noise)
+
+    noisy_image = image_tensor.clone()
+    image_tensor_cd = q_x(noisy_image, noise_step)
+
+    return image_tensor_cd
+
+
 def get_batch_logps(
     logits: "torch.Tensor", labels: "torch.Tensor", label_pad_token_id: int = IGNORE_INDEX
 ) -> tuple["torch.Tensor", "torch.Tensor"]:
@@ -102,6 +127,8 @@ class CustomDPOTrainer(DPOTrainer):
         self.label_smoothing = finetuning_args.dpo_label_smoothing
         self.simpo_gamma = finetuning_args.simpo_gamma
         self.average_mode = finetuning_args.reform_average_mode
+        self.noise_loss_type = finetuning_args.noise_loss_type
+        self.noise_beta = finetuning_args.noise_beta
 
         Trainer.__init__(self, model=model, **kwargs)
         self.model_accepts_loss_kwargs = False  # overwrite trainer's default behavior
@@ -331,13 +358,36 @@ class CustomDPOTrainer(DPOTrainer):
 
         reference_chosen_logps, reference_rejected_logps = self.compute_reference_log_probs(model, batch)
         if self.loss_type == "reform":
+            if self.noise_loss_type.startswith("reform_weight"):
+                from copy import deepcopy
+                noise_batch = deepcopy(batch)
+                if "images" in noise_batch:
+                    noise_batch["images"] = [add_image_diffusion_noise(_image, 800) for _image in noise_batch["images"]]
+                elif "pixel_values" in batch:
+                    noise_batch["pixel_values"] = [add_image_diffusion_noise(_image, 800) for _image in noise_batch["pixel_values"]]
+
+                with torch.no_grad():
+                    chosen_token_logps_noise_per, rejected_token_logps_noise = self.concatenated_forward(model, noise_batch)[-2:]
+                    chosen_weight = (chosen_token_logps.exp() - chosen_token_logps_noise_per.exp()) * self.noise_beta
+                    rejected_weight = (rejected_token_logps.exp() - rejected_token_logps_noise.exp()) * self.noise_beta
+                    if self.noise_loss_type.startswith("reform_weight_clip"):
+                        import re
+                        match = re.search(r'_(\d+)_(\d+)$', self.noise_loss_type)
+                        min_weight, max_weight = int(match.group(1)) / 10, int(match.group(2)) / 10
+                        chosen_weight = chosen_weight.clamp(min=-min_weight, max=max_weight)
+                        rejected_weight = chosen_weight.clamp(min=-min_weight, max=max_weight)
+            else:
+                chosen_weight = 1
+                rejected_weight = 1
             losses, chosen_rewards, rejected_rewards = self.dpo_loss_reform(
                 chosen_token_logps,
                 rejected_token_logps,
                 reference_chosen_logps,
                 reference_rejected_logps,
                 chosen_length,
-                rejected_length
+                rejected_length,
+                chosen_weight,
+                rejected_weight,
             )
         else:
             losses, chosen_rewards, rejected_rewards = self.compute_preference_loss(
