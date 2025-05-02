@@ -39,6 +39,14 @@ if TYPE_CHECKING:
 
     from ...hparams import FinetuningArguments
 
+def batch_add_image_noise(images, noise_step):
+    if isinstance(images, torch.Tensor):
+        batch_size = images.size(0) // 2
+        noise_images = torch.cat([add_image_diffusion_noise(images[:batch_size], noise_step)] * 2, dim=0)
+    if isinstance(images, list):
+        noise_images = [add_image_diffusion_noise(_image, noise_step) for _image in images]
+    return noise_images
+
 
 def add_image_diffusion_noise(image_tensor, noise_step):
     num_steps = 1000  # Number of diffusion steps
@@ -362,9 +370,9 @@ class CustomDPOTrainer(DPOTrainer):
                 from copy import deepcopy
                 noise_batch = deepcopy(batch)
                 if "images" in noise_batch:
-                    noise_batch["images"] = [add_image_diffusion_noise(_image, 800) for _image in noise_batch["images"]]
+                    noise_batch["images"] = batch_add_image_noise(noise_batch["images"])
                 elif "pixel_values" in batch:
-                    noise_batch["pixel_values"] = [add_image_diffusion_noise(_image, 800) for _image in noise_batch["pixel_values"]]
+                    noise_batch["pixel_values"] = batch_add_image_noise(noise_batch["pixel_values"])
 
                 with torch.no_grad():
                     chosen_token_logps_noise_per, rejected_token_logps_noise = self.concatenated_forward(model, noise_batch)[-2:]
