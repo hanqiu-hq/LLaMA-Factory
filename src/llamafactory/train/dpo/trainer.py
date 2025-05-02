@@ -370,9 +370,9 @@ class CustomDPOTrainer(DPOTrainer):
                 from copy import deepcopy
                 noise_batch = deepcopy(batch)
                 if "images" in noise_batch:
-                    noise_batch["images"] = batch_add_image_noise(noise_batch["images"])
+                    noise_batch["images"] = batch_add_image_noise(noise_batch["images"], 800)
                 elif "pixel_values" in batch:
-                    noise_batch["pixel_values"] = batch_add_image_noise(noise_batch["pixel_values"])
+                    noise_batch["pixel_values"] = batch_add_image_noise(noise_batch["pixel_values"], 800)
 
                 with torch.no_grad():
                     chosen_token_logps_noise_per, rejected_token_logps_noise = self.concatenated_forward(model, noise_batch)[-2:]
