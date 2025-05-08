@@ -791,6 +791,27 @@
       "chosen": "chosen",
       "rejected": "rejected",
       "images": "images"
+    },
+      "rlaif_10k_sample_revise_noise_in800_02_semantic_08": {
+    "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_sample_revise_noise_in800_02_semantic_08.json",
+    "ranking": true,
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "images": "images"
+    }
+  },
+  "rlaif_10k_sample_revise_noise_in800_04_semantic_06": {
+    "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_sample_revise_noise_in800_04_semantic_06.json",
+    "ranking": true,
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "images": "images"
     }
   }
 }
