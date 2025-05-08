@@ -749,17 +749,6 @@
       "images": "images"
     }
   },
-  "rlaif_10k_semantic_revisebest": {
-    "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_semantic_sample_revise_best.json",
-    "ranking": true,
-    "formatting": "sharegpt",
-    "columns": {
-      "messages": "messages",
-      "chosen": "chosen",
-      "rejected": "rejected",
-      "images": "images"
-    }
-  },
   "rlaif_10k_semantic_in800_mergerank": {
     "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_semantic_in800_mergerank.json",
     "ranking": true,
@@ -773,6 +762,28 @@
   },
   "rlaif_10k_semantic_in800_descweight0": {
     "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_semantic_in800_descweight0.json",
+    "ranking": true,
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "images": "images"
+    }
+  },
+  "rlaif_10k_sample_revise_noise_in800": {
+    "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_sample_revise_noise_in800.json",
+    "ranking": true,
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "images": "images"
+    }
+  },
+  "rlaif_10k_sample_revise_noise_semantic": {
+    "file_name": "./datasets/cdpo/qwen25_vl_rlaif_10k_sample_revise_noise_semantic.json",
     "ranking": true,
     "formatting": "sharegpt",
     "columns": {
