@@ -137,6 +137,7 @@ class CustomDPOTrainer(DPOTrainer):
         self.average_mode = finetuning_args.reform_average_mode
         self.noise_loss_type = finetuning_args.noise_loss_type
         self.noise_beta = finetuning_args.noise_beta
+        self.noise_step = finetuning_args.noise_step
 
         Trainer.__init__(self, model=model, **kwargs)
         self.model_accepts_loss_kwargs = False  # overwrite trainer's default behavior
@@ -370,9 +371,9 @@ class CustomDPOTrainer(DPOTrainer):
                 from copy import deepcopy
                 noise_batch = deepcopy(batch)
                 if "images" in noise_batch:
-                    noise_batch["images"] = batch_add_image_noise(noise_batch["images"], 800)
+                    noise_batch["images"] = batch_add_image_noise(noise_batch["images"], self.noise_step)
                 elif "pixel_values" in batch:
-                    noise_batch["pixel_values"] = batch_add_image_noise(noise_batch["pixel_values"], 800)
+                    noise_batch["pixel_values"] = batch_add_image_noise(noise_batch["pixel_values"], self.noise_step)
 
                 with torch.no_grad():
                     chosen_token_logps_noise_per, rejected_token_logps_noise = self.concatenated_forward(model, noise_batch)[-2:]
