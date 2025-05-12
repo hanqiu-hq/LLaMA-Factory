@@ -384,6 +384,8 @@ class CustomDPOTrainer(DPOTrainer):
                         min_weight, max_weight = int(match.group(1)) / 10, int(match.group(2)) / 10
                         chosen_weight = chosen_weight.clamp(min=-min_weight, max=max_weight)
                         rejected_weight = chosen_weight.clamp(min=-min_weight, max=max_weight)
+                    chosen_weight = 1 + chosen_weight
+                    rejected_weight = 1 - rejected_weight
             else:
                 chosen_weight = 1
                 rejected_weight = 1

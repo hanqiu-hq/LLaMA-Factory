@@ -182,6 +182,10 @@ class RLHFArguments:
         default="none",
         metadata={"help": "reform_weight, reform_weight_clip"}
     )
+    noise_step: str = field(
+        default="800",
+        metadata={"help": "noise step for compute weight"}
+    )
     noise_beta: float = field(
         default="0.5",
         metadata={"help": "for per token weight"}
