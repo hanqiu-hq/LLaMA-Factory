@@ -384,7 +384,7 @@ class CustomDPOTrainer(DPOTrainer):
                         match = re.search(r'_(\d+)_(\d+)$', self.noise_loss_type)
                         min_weight, max_weight = int(match.group(1)) / 10, int(match.group(2)) / 10
                         chosen_weight = chosen_weight.clamp(min=-min_weight, max=max_weight)
-                        rejected_weight = rejected_weight.clamp(min=-min_weight, max=max_weight)
+                        rejected_weight = rejected_weight.clamp(min=-max_weight, max=min_weight)
                     chosen_weight = 1 + chosen_weight
                     rejected_weight = 1 - rejected_weight
             else:
